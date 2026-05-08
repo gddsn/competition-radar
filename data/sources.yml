@@ -1,0 +1,105 @@
+version: 1
+updated_by: competition-radar MVP
+
+global_keywords:
+  - 竞赛
+  - 大赛
+  - 比赛
+  - 挑战赛
+  - 数学建模
+  - 统计建模
+  - 数据分析
+  - 金融
+  - 金融科技
+  - 量化
+  - 风控
+  - 投研
+  - 商业案例
+  - 创新创业
+  - 人工智能
+  - 算法
+  - 英语
+
+defaults:
+  timeout_seconds: 12
+  max_items_per_source: 8
+  fetch_detail_pages: true
+
+sources:
+  - name: 全国大学生数学建模竞赛官网
+    url: https://www.mcm.edu.cn/index.moma
+    category: 数学建模类
+    enabled: true
+    keywords:
+      - 数学建模
+      - 高教社杯
+      - CUMCM
+
+  - name: 全国大学生创业服务网
+    url: https://cy.ncss.cn/
+    category: 创新创业类
+    enabled: true
+    keywords:
+      - 中国国际大学生创新大赛
+      - 创新创业
+      - 互联网+
+
+  - name: 挑战杯官网
+    url: https://www.tiaozhanbei.net/
+    category: 创新创业类
+    enabled: true
+    keywords:
+      - 挑战杯
+      - 创业计划
+      - 课外学术科技
+
+  - name: 全国大学生市场调查与分析大赛
+    url: http://www.china-cssc.org/
+    category: 商业案例分析类
+    enabled: true
+    keywords:
+      - 市场调查
+      - 数据分析
+      - 正大杯
+      - 商业分析
+
+  - name: 全国大学生电子商务三创赛
+    url: http://www.3chuang.net/
+    category: 商业案例分析类
+    enabled: true
+    keywords:
+      - 电子商务
+      - 三创赛
+      - 创新
+      - 创意
+      - 创业
+
+  - name: CCF BDCI
+    url: https://www.datafountain.cn/competitions
+    category: 数据分析 / 统计建模类
+    enabled: true
+    keywords:
+      - BDCI
+      - 大数据
+      - 计算智能
+      - 数据科学
+
+  - name: 中国大学生计算机设计大赛
+    url: https://jsjds.blcu.edu.cn/
+    category: 编程 / 算法 / AI 应用类
+    enabled: true
+    keywords:
+      - 计算机设计
+      - 人工智能
+      - 软件应用
+      - 算法
+
+  - name: 全国大学生英语竞赛
+    url: https://www.chinaneccs.cn/
+    category: 英语与财经表达类
+    enabled: true
+    keywords:
+      - 英语竞赛
+      - NECCS
+      - 写作
+      - 演讲
