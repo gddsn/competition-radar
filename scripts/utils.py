@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 from urllib.parse import urldefrag, urljoin, urlparse
 
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - Python < 3.9 fallback.
+    ZoneInfo = None  # type: ignore[assignment]
+
 import requests
 import yaml
 from bs4 import BeautifulSoup
@@ -23,6 +28,13 @@ LATEST_CSV = DATA_DIR / "competitions_latest.csv"
 DB_PATH = DATA_DIR / "competitions.db"
 WEEKLY_MD = REPORTS_DIR / "weekly_report.md"
 WEEKLY_XLSX = REPORTS_DIR / "weekly_report.xlsx"
+SCHEDULE_MD = REPORTS_DIR / "schedule_report.md"
+SCHEDULE_XLSX = REPORTS_DIR / "schedule_report.xlsx"
+
+if ZoneInfo is not None:
+    BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+else:
+    BEIJING_TZ = dt.timezone(dt.timedelta(hours=8), name="Asia/Shanghai")
 
 FIELDS = [
     "比赛名称",
@@ -75,6 +87,14 @@ def today_str() -> str:
     return dt.datetime.now().strftime("%Y-%m-%d")
 
 
+def now_beijing_str() -> str:
+    return dt.datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M")
+
+
+def today_beijing_str() -> str:
+    return dt.datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
+
+
 def normalize_space(value: object) -> str:
     text = "" if value is None else str(value)
     return re.sub(r"\s+", " ", text).strip()
@@ -102,7 +122,7 @@ def read_csv(path: Path) -> List[Dict[str, str]]:
 def write_csv(rows: Sequence[Dict[str, object]], path: Path) -> None:
     ensure_dirs()
     with path.open("w", encoding="utf-8-sig", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore")
+        writer = csv.DictWriter(file, fieldnames=FIELDS, extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         for row in rows:
             writer.writerow(ensure_row(row))

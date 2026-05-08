@@ -2,7 +2,7 @@ name: Weekly Competition Report
 
 on:
   schedule:
-    - cron: "0 0 * * 1"
+    - cron: "0 16 * * 6"
   workflow_dispatch:
 
 permissions:
@@ -34,11 +34,14 @@ jobs:
       - name: Generate report
         run: python scripts/generate_report.py
 
+      - name: Generate schedule report
+        run: python scripts/generate_schedule_report.py
+
       - name: Commit updated report
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/competitions_latest.csv data/competitions.db reports/weekly_report.md reports/weekly_report.xlsx
+          git add data/competitions_latest.csv data/competitions.db reports/weekly_report.md reports/weekly_report.xlsx reports/schedule_report.md reports/schedule_report.xlsx
           if git diff --cached --quiet; then
             echo "No report changes."
           else

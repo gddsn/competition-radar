@@ -8,8 +8,8 @@
 - 合并人工种子数据与公开网页采集结果：`data/competitions_seed.csv`
 - 抽取报名时间、比赛时间、结果公布时间、奖金、证书、主办单位、官方链接
 - 生成含金量评级、金融路线价值评分、商赛价值评分、数学建模能力评分、数据分析/量化/风控/投研评分
-- 输出 `CSV`、`SQLite`、`Markdown` 周报和 `Excel` 表格
-- 通过 GitHub Actions 每周一北京时间 8:00 自动刷新
+- 输出 `CSV`、`SQLite`、`Markdown` 周报、`Excel` 表格和竞赛日程报告
+- 通过 GitHub Actions 每周日北京时间 00:00 自动刷新
 
 ## 快速开始
 
@@ -21,6 +21,7 @@ pip install -r requirements.txt
 python scripts/collect_competitions.py
 python scripts/score_competitions.py
 python scripts/generate_report.py
+python scripts/generate_schedule_report.py
 ```
 
 生成结果：
@@ -29,6 +30,10 @@ python scripts/generate_report.py
 - `data/competitions.db`
 - `reports/weekly_report.md`
 - `reports/weekly_report.xlsx`
+- `reports/schedule_report.md`
+- `reports/schedule_report.xlsx`
+
+`weekly_report` 主要用于判断含金量、金融路线价值、商赛简历价值、数学建模能力和数据分析/量化适配度。`schedule_report` 主要用于查看比赛时间、报名/截止时间、结果公布/获奖公示时间。
 
 ## 数据字段
 
@@ -48,7 +53,15 @@ MVP 使用可解释的关键词和类别规则：
 
 ## 每周自动运行
 
-`.github/workflows/weekly_competition_report.yml` 会在每周一 `00:00 UTC` 运行，也就是北京时间周一上午 8:00。工作流会安装依赖、执行三段脚本，并在数据变化时自动提交更新。
+`.github/workflows/weekly_competition_report.yml` 会在北京时间每周日 00:00 自动运行。GitHub Actions 的 cron 使用 UTC 时间，因此配置为：
+
+```yaml
+0 16 * * 6
+```
+
+也就是 UTC 周六 16:00，对应北京时间周日 00:00。工作流会安装依赖，依次执行采集、评分、周报生成和日程报告生成，并在数据变化时自动提交更新。
+
+所有比赛时间都以官方通知为准。日程报告中标记为“待核实”或“周期性/待核实”的比赛，不要直接导入日历，应先回到官方链接确认。
 
 ## 后续扩展方向
 
@@ -56,4 +69,3 @@ MVP 使用可解释的关键词和类别规则：
 - 接入网站：把 `competitions_latest.csv` 或 `competitions.db` 作为后端数据源
 - 接入题库项目：把数学建模、统计、Python、金融分析能力要求映射到训练题单
 - 兼容 MATLAB：后续为数模赛题分析、仿真、优化模型保留 MATLAB 脚本目录
-
