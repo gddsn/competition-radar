@@ -62,6 +62,26 @@ FIELDS = [
     "来源页面",
     "更新时间",
 ]
+TIME_FIELDS = {"报名时间", "比赛时间", "结果公布时间"}
+UNCERTAIN_TIME_PATTERNS = [
+    "通常每年",
+    "每年上半年",
+    "每年下半年",
+    "每年春季",
+    "每年秋季",
+    "每年",
+    "以年度通知为准",
+    "关注学校通知",
+    "赛后数月",
+    "待核实",
+    "待核验",
+    "待定",
+    "另行通知",
+    "暂未公布",
+]
+EXPLICIT_DATE_RE = re.compile(
+    r"20\d{2}\s*(?:年\s*\d{1,2}\s*月(?:\s*\d{1,2}\s*日?)?|[./-]\s*\d{1,2}(?:[./-]\s*\d{1,2})?)"
+)
 
 REQUEST_HEADERS = {
     "User-Agent": (
@@ -102,6 +122,17 @@ def normalize_space(value: object) -> str:
 
 def is_blank(value: object) -> bool:
     return normalize_space(value) in {"", "待补充", "待核验", "None", "nan"}
+
+
+def time_value_rank(value: object) -> int:
+    text = normalize_space(value)
+    if is_blank(text):
+        return 0
+    if EXPLICIT_DATE_RE.search(text):
+        return 3
+    if any(pattern in text for pattern in UNCERTAIN_TIME_PATTERNS):
+        return 2
+    return 1
 
 
 def ensure_row(row: Dict[str, object]) -> Dict[str, str]:
@@ -251,7 +282,10 @@ def merge_rows(*groups: Sequence[Dict[str, object]]) -> List[Dict[str, str]]:
                 continue
             current = merged[identity]
             for field in FIELDS:
-                if is_blank(current.get(field)) and not is_blank(row.get(field)):
+                if field in TIME_FIELDS:
+                    if time_value_rank(row.get(field)) > time_value_rank(current.get(field)):
+                        current[field] = row[field]
+                elif is_blank(current.get(field)) and not is_blank(row.get(field)):
                     current[field] = row[field]
     return [merged[identity] for identity in order]
 

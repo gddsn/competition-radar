@@ -85,9 +85,29 @@ INVALID_NAME_PATTERNS = [
     "竞赛简介",
     "培训交流",
     "学霸笔记",
+    "官方网站 移动版",
     "Competitions - DataFountain",
+    "数据科学竞赛/大数据 Competitions - DataFountain",
     "数据科学竞赛/大数据",
 ]
+NAVIGATION_OR_NEWS_PATTERNS = [
+    "动态",
+    "通知",
+    "资讯",
+    "简介",
+    "章程",
+    "培训",
+    "倒计时",
+    "笔记",
+    "课程中心",
+    "期刊",
+    "通讯",
+    "合作",
+    "平台",
+    "栏目",
+    "频道",
+]
+GENERIC_TOPIC_TITLES = {"大数据和人工智能", "数据科学竞赛/大数据 Competitions - DataFountain"}
 VALID_COMPETITION_KEYWORDS = ["竞赛", "大赛", "挑战赛", "Challenge", "Cup", "Contest", "赛"]
 GENERIC_NAVIGATION_PATTERNS = ["首页", "通知公告", "新闻动态", "下载中心", "关于我们", "联系我们"]
 MOJIBAKE_RE = re.compile(r"[�ÃÂåäæçÐð]{2,}|\\x[0-9a-fA-F]{2}")
@@ -220,6 +240,11 @@ def invalid_competition_reason(row: Dict[str, str]) -> str:
         return "比赛名称为空。"
     if MOJIBAKE_RE.search(name) or sum(1 for char in name if char in MOJIBAKE_CHARS) >= 3:
         return "标题疑似编码异常或乱码。"
+    if name in GENERIC_TOPIC_TITLES:
+        return "标题是平台栏目或泛化主题，不是明确比赛名称。"
+    for pattern in NAVIGATION_OR_NEWS_PATTERNS:
+        if pattern.lower() in name.lower():
+            return f"标题疑似导航/资讯/培训内容：{pattern}。"
     for pattern in INVALID_NAME_PATTERNS:
         if pattern.lower() in name.lower():
             return f"标题命中误抓取关键词：{pattern}。"
@@ -236,24 +261,58 @@ def is_valid_competition(row: Dict[str, str]) -> bool:
     return invalid_competition_reason(row) == ""
 
 
-def build_events(rows: Iterable[Dict[str, str]]) -> List[Dict[str, str]]:
+def _suspect_entry(row: Dict[str, str], reason: str) -> Dict[str, str]:
+    time_parts = []
+    for label in ["报名时间", "比赛时间", "结果公布时间"]:
+        value = normalize_space(row.get(label, ""))
+        if value:
+            time_parts.append(f"{label}: {value}")
+    return {
+        "事件类型": "疑似误抓取",
+        "解析日期": "",
+        "时间状态": "疑似误抓取",
+        "时间原文": "；".join(time_parts),
+        "比赛名称": normalize_space(row.get("比赛名称", "")),
+        "类别": normalize_space(row.get("类别", "")),
+        "推荐参加优先级": normalize_space(row.get("推荐参加优先级", "")),
+        "含金量评级": normalize_space(row.get("含金量评级", "")),
+        "金融路线价值评分": normalize_space(row.get("金融路线价值评分", "")),
+        "商赛价值评分": normalize_space(row.get("商赛价值评分", "")),
+        "数学建模能力评分": normalize_space(row.get("数学建模能力评分", "")),
+        "数据分析量化评分": normalize_space(row.get("数据分析量化评分", "")),
+        "官方链接": normalize_space(row.get("官方链接", "")),
+        "来源页面": normalize_space(row.get("来源页面", "")),
+        "是否疑似误抓取": "是",
+        "备注": reason,
+    }
+
+
+def build_events(rows: Iterable[Dict[str, str]]) -> Tuple[List[Dict[str, str]], Dict[str, int], List[Dict[str, str]]]:
     event_specs = [
         ("报名/报名截止", "报名时间"),
         ("正式比赛", "比赛时间"),
         ("结果公布/获奖公示", "结果公布时间"),
     ]
     events: List[Dict[str, str]] = []
+    stats = {"空时间字段跳过": 0}
+    suspect_entries: List[Dict[str, str]] = []
     for row in rows:
         invalid_reason = invalid_competition_reason(row)
+        if invalid_reason:
+            suspect_entries.append(_suspect_entry(row, invalid_reason))
         for event_type, time_field in event_specs:
-            parsed = parse_time_text(row.get(time_field, ""))
+            raw_time = normalize_space(row.get(time_field, ""))
+            if not raw_time:
+                stats["空时间字段跳过"] += 1
+                continue
+            parsed = parse_time_text(raw_time)
             note_parts = [invalid_reason] if invalid_reason else [parsed["备注"]]
             events.append(
                 {
                     "事件类型": event_type,
                     "解析日期": parsed["解析日期"],
                     "时间状态": parsed["时间状态"],
-                    "时间原文": normalize_space(row.get(time_field, "")),
+                    "时间原文": raw_time,
                     "比赛名称": normalize_space(row.get("比赛名称", "")),
                     "类别": normalize_space(row.get("类别", "")),
                     "推荐参加优先级": normalize_space(row.get("推荐参加优先级", "")),
@@ -268,7 +327,7 @@ def build_events(rows: Iterable[Dict[str, str]]) -> List[Dict[str, str]]:
                     "备注": " ".join(note_parts),
                 }
             )
-    return events
+    return events, stats, suspect_entries
 
 
 def _valid_events(events: Iterable[Dict[str, str]]) -> List[Dict[str, str]]:
@@ -291,6 +350,11 @@ def _scheduled_events(events: Iterable[Dict[str, str]]) -> List[Dict[str, str]]:
     )
 
 
+def _future_events(events: Iterable[Dict[str, str]]) -> List[Dict[str, str]]:
+    today = today_beijing_str()
+    return [event for event in events if event.get("解析日期", "") >= today]
+
+
 def _calendar_events(events: Iterable[Dict[str, str]]) -> List[Dict[str, str]]:
     return sorted(
         [
@@ -300,6 +364,7 @@ def _calendar_events(events: Iterable[Dict[str, str]]) -> List[Dict[str, str]]:
             and event["比赛名称"]
             and event["事件类型"]
             and event["解析日期"]
+            and event["解析日期"] >= today_beijing_str()
             and event["时间状态"] in {"具体日期", "日期范围"}
         ],
         key=_sort_key,
@@ -345,15 +410,16 @@ def _append_table(lines: List[str], headers: List[str], rows: List[List[str]]) -
         lines.append("| " + " | ".join(_escape_md(value) for value in row) + " |")
 
 
-def generate_markdown(events: List[Dict[str, str]]) -> str:
+def generate_markdown(events: List[Dict[str, str]], stats: Dict[str, int], suspect_entries: List[Dict[str, str]]) -> str:
     valid_events = _valid_events(events)
-    suspect_events = _suspect_events(events)
     scheduled_valid = _scheduled_events(valid_events)
-    competition_events = [event for event in scheduled_valid if event["事件类型"] == "正式比赛"]
-    signup_events = [event for event in scheduled_valid if event["事件类型"] == "报名/报名截止"]
-    result_events = [event for event in scheduled_valid if event["事件类型"] == "结果公布/获奖公示"]
+    future_scheduled_valid = _future_events(scheduled_valid)
+    competition_events = [event for event in future_scheduled_valid if event["事件类型"] == "正式比赛"]
+    signup_events = [event for event in future_scheduled_valid if event["事件类型"] == "报名/报名截止"]
+    result_events = [event for event in future_scheduled_valid if event["事件类型"] == "结果公布/获奖公示"]
     calendar_events = _calendar_events(events)
     uncertain_events = _uncertain_events(events)
+    clear_events = [event for event in scheduled_valid if event["时间状态"] in {"具体日期", "日期范围"}]
 
     lines = [
         "# 大学生竞赛日程报告",
@@ -362,6 +428,14 @@ def generate_markdown(events: List[Dict[str, str]]) -> str:
         "- 自动运行时间：北京时间每周日 00:00",
         "- GitHub Actions cron：0 16 * * 6",
         "- 说明：GitHub Actions 使用 UTC 时间，0 16 * * 6 对应北京时间周日 00:00。",
+        "",
+        "## 数据质量摘要",
+        "",
+        f"- 有明确日期的事件：{len(clear_events)} 条",
+        f"- 可进日历事件：{len(calendar_events)} 条",
+        f"- 待核实事件：{len(uncertain_events)} 条",
+        f"- 疑似误抓取事件：{len(suspect_entries)} 条",
+        f"- 空时间字段跳过：{stats.get('空时间字段跳过', 0)} 条",
         "",
         "## 一、未来重点比赛时间",
         "",
@@ -457,7 +531,7 @@ def generate_markdown(events: List[Dict[str, str]]) -> str:
         ["比赛名称", "类别", "来源页面", "过滤原因"],
         [
             [event["比赛名称"], event["类别"], event["来源页面"], event["备注"]]
-            for event in _unique_by_competition(suspect_events, limit=80)
+            for event in _unique_by_competition(suspect_entries, limit=80)
         ],
     )
 
@@ -471,8 +545,8 @@ def generate_markdown(events: List[Dict[str, str]]) -> str:
     lines.append(f"2. 需要回源确认时间的比赛：{check_names}。")
     lines.append(
         "3. 当前不适合进日历提醒的比赛事件："
-        f"{len(uncertain_events) + len(suspect_events)} 条，其中待核实 {status_counts.get('周期性/待核实', 0)} 条，"
-        f"疑似误抓取 {len(suspect_events)} 条。"
+        f"{len(uncertain_events) + len(suspect_entries)} 条，其中待核实 {status_counts.get('周期性/待核实', 0)} 条，"
+        f"疑似误抓取 {len(suspect_entries)} 条，空时间字段跳过 {stats.get('空时间字段跳过', 0)} 条。"
     )
 
     return "\n".join(lines).strip() + "\n"
@@ -504,9 +578,9 @@ def _append_sheet(wb: Workbook, title: str, rows: List[Dict[str, str]], fields: 
     _style_sheet(ws)
 
 
-def generate_excel(events: List[Dict[str, str]]) -> None:
+def generate_excel(events: List[Dict[str, str]], suspect_entries: List[Dict[str, str]]) -> None:
     valid_events = _valid_events(events)
-    scheduled_valid = _scheduled_events(valid_events)
+    scheduled_valid = _future_events(_scheduled_events(valid_events))
     wb = Workbook()
     _append_sheet(wb, "日程总览", sorted(events, key=_sort_key))
     _append_sheet(wb, "比赛时间优先", [event for event in scheduled_valid if event["事件类型"] == "正式比赛"])
@@ -514,17 +588,20 @@ def generate_excel(events: List[Dict[str, str]]) -> None:
     _append_sheet(wb, "结果公布提醒", [event for event in scheduled_valid if event["事件类型"] == "结果公布/获奖公示"])
     _append_sheet(wb, "可进日历", _calendar_events(events))
     _append_sheet(wb, "待核实", _uncertain_events(events))
-    _append_sheet(wb, "疑似误抓取", sorted(_suspect_events(events), key=_sort_key))
+    _append_sheet(wb, "疑似误抓取", sorted(suspect_entries, key=_sort_key))
     wb.save(SCHEDULE_XLSX)
 
 
 def main() -> None:
     ensure_dirs()
     rows = read_csv(LATEST_CSV)
-    events = build_events(rows)
-    SCHEDULE_MD.write_text(generate_markdown(events), encoding="utf-8")
-    generate_excel(events)
-    print(f"Generated schedule report for {len(rows)} competitions and {len(events)} events.")
+    events, stats, suspect_entries = build_events(rows)
+    SCHEDULE_MD.write_text(generate_markdown(events, stats, suspect_entries), encoding="utf-8")
+    generate_excel(events, suspect_entries)
+    print(
+        "Generated schedule report for "
+        f"{len(rows)} competitions, {len(events)} events, and {stats.get('空时间字段跳过', 0)} skipped empty fields."
+    )
 
 
 if __name__ == "__main__":
